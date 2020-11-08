@@ -21,6 +21,7 @@ const styles = html`
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      color: 'var(--primary-text-color)';
     }
     #label {
       display: flex;
