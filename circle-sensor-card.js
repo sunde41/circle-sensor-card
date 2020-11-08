@@ -1,84 +1,112 @@
-import {
-  LitElement, html
-} from 'https://unpkg.com/@polymer/lit-element@^0.5.2/lit-element.js?module';
+import { LitElement, html } from 'https://unpkg.com/lit-element@2.0.1/lit-element.js?module';
+
+const styles = html`
+    <style>
+      :host {
+        cursor: pointer;
+      }
+      .container {
+        position: relative;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+    .labelContainer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #label {
+      display: flex;
+      line-height: 1;
+    }
+    #label.bold {
+      font-weight: bold;
+    }
+    #label, #name {
+      margin: 1% 0;
+    }
+    .text, #name {
+      font-size: 100%;
+    }
+    .unit {
+      font-size: 75%;
+    }
+    </style>
+  `
 
 class CircleSensorCard extends LitElement {
   static get properties() {
     return {
-      hass: Object,
-      config: Object,
-      state: Object,
-      dashArray: String
+      hass: {},
+      config: {},
     }
   }
-
-  _render({ state, dashArray, config }) {
+  
+  get entity() {
+    return this.hass.states[this.config.entity]
+  }
+  
+  handleMore() {
+    const e = new Event('hass-more-info', { bubbles: true, composed: true })
+    e.detail = { entityId: this.entity.entity_id }
+    this.dispatchEvent(e);
+  }
+  
+  render() {
+    const { name, attribute, fill, stroke_color, stroke_width, show_max, attribute_max, max, min, units, color_stops, font_style } = this.config;
+    const { state, attributes: { unit_of_measurement }, } = this.entity;
+    const state_ = attribute!==undefined ? state.attributes[attribute] : state;
+    const r = 200 * .45;
+    const min_ = min !==undefined ? min : 0;
+    let stroke_ = stroke_color !==undefined ? stroke_color : '#03a9f4';
+    const max_ = attribute_max !==undefined ? state.attributes[attribute_max] : (max !==undefined ? max : 100);
+    const val = this._calculateValueBetween(min_, max_, state_);
+    const score = val * 2 * Math.PI * r;
+    const total = 10 * r;
+    const dashArray = `${score} ${total}`;
+    let colorStops = {};
+    colorStops[min_] = stroke_color !==undefined ? stroke_color : '#03a9f4';
+    if (color_stops!==undefined) {
+      Object.keys(color_stops).forEach((key) => {
+        colorStops[key] = color_stops[key];
+      });
+      stroke_ = this._calculateStrokeColor(state, colorStops);
+    }
+    let css = ''
+    if (font_style!=undefined) {
+      Object.keys(font_style).forEach((prop) => {
+        css += `${prop}:${font_style[prop]};`
+      });
+    }
+    
     return html`
-      <style>
-          :host {
-            cursor: pointer;
-          }
-
-          .container {
-            position: relative;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-          }
-
-          .labelContainer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-          }
-          
-          #label {
-            display: flex;
-            line-height: 1;
-          }
-          
-          #label.bold {
-            font-weight: bold;
-          }
-          
-          #label, #name {
-            margin: 1% 0;
-          }
-
-          .text, #name {
-            font-size: 100%;
-          }
-          
-          .unit {
-            font-size: 75%;
-          }
-
-      </style>
-      <div class="container" id="container" on-click="${() => this._click()}">
+      ${styles}
+      <div class="container" id="container" @click="${() => this.handleMore()}" ?more-info="true">
         <svg viewbox="0 0 200 200" id="svg">
           <circle id="circle" cx="50%" cy="50%" r="45%"
-            fill$="${config.fill || 'rgba(255, 255, 255, .75)'}"
-            stroke$="${config.stroke_color || '#03a9f4'}"
-            stroke-dasharray$="${dashArray}"
-            stroke-width$="${config.stroke_width || 6}" 
+            fill="${fill!==undefined ? fill : 'rgba(255, 255, 255, .75)'}"
+            stroke="${stroke_}"
+            stroke-dasharray="${dashArray}"
+            stroke-width="${stroke_width !==undefined ? stroke_width : 6}" 
             transform="rotate(-90 100 100)"/>
         </svg>
-        <span class="labelContainer">
-          ${config.name != null ? html`<span id="name">${config.name}</span>` : ''}
-          <span id="label" class$="${!!config.name ? 'bold' : ''}">
+        <span class="labelContainer" style="${css}">
+          ${name !==undefined ? html`<span id="name">${name}</span>` : ''}
+          <span id="label" class="${name !==undefined ? 'bold' : ''}">
             <span class="text">
-              ${config.attribute ? state.attributes[config.attribute] : state.state}
+              ${attribute !==undefined ? state.attributes[attribute] : state}
             </span>
             <span class="unit">
-              ${config.show_max
-                ? html`&nbsp/ ${config.attribute_max ? state.attributes[config.attribute_max] : config.max}`
-                : (config.units ? config.units : state.attributes.unit_of_measurement)}
+              ${show_max !==undefined
+                ? html`&nbsp/ ${attribute_max !==undefined ? state.attributes[attribute_max] : max_ }`
+                : (units !==undefined ? units : (unit_of_measurement !==undefined ? unit_of_measurement : '') )}
             </span>
           </span>
         </span>
@@ -86,95 +114,21 @@ class CircleSensorCard extends LitElement {
     `;
   }
 
-  _createRoot() {
-    const shadow = this.attachShadow({ mode: 'open' })
-    if (!this.config.show_card) {
-      return shadow;
-    }
-    const card = document.createElement('ha-card');
-    shadow.appendChild(card);
-    return card;
-  }
-
-  _didRender() {
-    this.circle = this._root.querySelector('#circle');
-    if (this.config) {
-      this._updateConfig();
-    }
-  }
-
   setConfig(config) {
     if (!config.entity) {
-      throw Error('No entity defined')
+      throw new Error('error.missing_entity');
     }
     this.config = config;
-    if (this.circle) {
-      this._updateConfig();
-    }
   }
 
   getCardSize() {
-    return 3;
+    return 2;
   }
-
-  _updateConfig() {
-    const container = this._root.querySelector('.labelContainer');
-    container.style.color = 'var(--primary-text-color)';
-
-    if (this.config.font_style) {
-      Object.keys(this.config.font_style).forEach((prop) => {
-        container.style.setProperty(prop, this.config.font_style[prop]);
-      });
-    }
+  
+  _calculateValueBetween(start, end, val) {
+    return (val - start) / (end - start);
   }
-
-  set hass(hass) {
-    this.state = hass.states[this.config.entity];
-
-    if (this.config.attribute) {
-      if (!this.state.attributes[this.config.attribute] ||
-          isNaN(this.state.attributes[this.config.attribute])) {
-        console.error(`Attribute [${this.config.attribute}] is not a number`);
-        return;
-      }
-    } else {
-      if (!this.state || isNaN(this.state.state)) {
-        console.error(`State is not a number`);
-        return;
-      }
-    }
-
-    const state = this.config.attribute
-      ? this.state.attributes[this.config.attribute]
-      : this.state.state;
-    const r = 200 * .45;
-    const min = this.config.min || 0;
-    const max = this.config.attribute_max
-      ? this.state.attributes[this.config.attribute_max]
-      : (this.config.max || 100);
-    const val = this._calculateValueBetween(min, max, state);
-    const score = val * 2 * Math.PI * r;
-    const total = 10 * r;
-    this.dashArray = `${score} ${total}`;
-
-    let colorStops = {};
-    colorStops[min] = this.config.stroke_color || '#03a9f4';
-    if (this.config.color_stops) {
-      Object.keys(this.config.color_stops).forEach((key) => {
-        colorStops[key] = this.config.color_stops[key];
-      });
-    }
-
-    if (this.circle) {
-      const stroke = this._calculateStrokeColor(state, colorStops);
-      this.circle.setAttribute('stroke', stroke);
-    }
-  }
-
-  _click() {
-    this._fire('hass-more-info', { entityId: this.config.entity });
-  }
-
+  
   _calculateStrokeColor(state, stops) {
     const sortedStops = Object.keys(stops).map(n => Number(n)).sort((a, b) => a - b);
     let start, end, val;
@@ -198,10 +152,6 @@ class CircleSensorCard extends LitElement {
       }
     }
     return this._getGradientValue(start, end, val);
-  }
-
-  _calculateValueBetween(start, end, val) {
-    return (val - start) / (end - start);
   }
 
   _getGradientValue(colorA, colorB, val) {
@@ -234,16 +184,6 @@ class CircleSensorCard extends LitElement {
     }
     return val.substr(0, 2);
   }
-
-  _fire(type, detail) {
-    const event = new Event(type, {
-      bubbles: true,
-      cancelable: false,
-      composed: true
-    });
-    event.detail = detail || {};
-    this.shadowRoot.dispatchEvent(event);
-    return event;
-  }
 }
+
 customElements.define('circle-sensor-card', CircleSensorCard);
